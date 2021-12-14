@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="viewport"
+        content="width = device-width, initial-scale = 1.0, minimum-scale = 1, maximum-scale = 1, user-scalable = no, viewport-fit=cover,minimal-ui" />
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <script>
+        var gameWidth = 1280;
+        var gameHeight = 720;
+        var currentScene = null;
+        var clickButton;
+        var player, cursors, platforms, txtEnding, btnReturn;
+        var bGame = false;
+        var stateWalking = -1;//-1 :NONE, 0:idle, 1=left walk, 2=right walk
+
+        function doGameOver() {
+            player.setVelocity(0, 0);
+            player.setAlpha(0);
+            bGame = false;
+            txtEnding.text = "GAME OVER";
+            btnReturn.visible = true;
+        }
+
+
+        function doClear() {
+            player.setVelocity(0, 0);
+            bGame = false;
+            txtEnding.text = "GAME CLEAR";
+            btnReturn.visible = true;
+        }
+
+        class titleScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "titleScene", active: true });
+            }
+            create() {
+                currentScene = this;
+                let text = this.add
+                    .text(300, 100, "Sample TileMAP1")
+                    .setFontSize(46)
+                    .setColor("#0");
+                clickButton = this.add
+                    .text(300, 400, "START TO CLICK")
+                    .setStroke("#0000ff", 4)
+                    .setBackgroundColor("#ddbcff")
+                    .setFontSize("60px")
+                    .setColor("#0f0")
+                    .setInteractive();
+                clickButton.on(
+                    "pointerdown",
+                    () => {
+                        this.scene.start("gameScene");
+                    },
+                    this
+                );
+            }
+        }
+        class gameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "gameScene", active: false });
+            }
+            preload() {
+
+                this.load.image('background', 'background.png');
+                this.load.image('tiles', 'tilemap.png');
+                this.load.tilemapTiledJSON('map', 'level1.json');
+                this.load.spritesheet("player", "./player.png", {
+                    frameWidth: 36,
+                    frameHeight: 36
+                });
+                this.load.image('trap', 'trap.png');
+                this.load.image('goal', 'goal.png');
+
+            }
+            create() {
+                currentScene = this;
+                const backgroundImage = this.add.image(0, 0, 'background')
+                .setOrigin(0, 0)
+                .setScrollFactor(0);
+                backgroundImage.setScale(2, 0.8);
+                const map = this.make.tilemap({ key: 'map' });
+                const tileset = map.addTilesetImage('tilemap', 'tiles');
+                platforms = map.createStaticLayer('platforms', tileset, 0, 200);
+                platforms.setCollisionByExclusion(-1, true);
+
+                player = this.physics.add.sprite(50, 300, 'player');
+                player.setScale(1.5);
+                player.setBounce(0.1);
+                player.setCollideWorldBounds(true);
+                this.physics.add.collider(player, platforms);
+
+
+                this.spikes = this.physics.add.group({
+                    allowGravity: false,
+                    immovable: true
+                });
+                map.getObjectLayer('trap').objects.forEach((spike) => {
+                    const spikeSprite = this.spikes.create(spike.x, spike.y + 200 - 40, 'trap').setOrigin(0);
+                });
+                this.physics.add.collider(player, this.spikes, doGameOver, null, this);
+
+
+                this.goal = this.physics.add.group({
+                    allowGravity: false,
+                    immovable: true
+                });
+                map.getObjectLayer('goal').objects.forEach((goal) => {
+                    const goalSprite = this.goal.create(goal.x, goal.y + 200 - 40, 'goal').setOrigin(0);
+                });
+                this.physics.add.collider(player, this.goal, doClear, null, this);
+
+
+                txtEnding = this.add
+                    .text(500, 100, "")
+                    .setScrollFactor(0)
+                    .setFontSize(46)
+                    .setColor("#ff0");
+
+                btnReturn = this.add
+                    .text(gameWidth / 2 - 100, 400, " BACK ")
+                    .setScrollFactor(0)
+                    .setFontSize(46)
+                    .setColor("#ff0")
+                    .setBackgroundColor("#aa5500")
+                    .setInteractive();
+                btnReturn.on(
+                    "pointerdown",
+                    () => {
+                        this.scene.start("titleScene");
+                    }, this);
+                btnReturn.visible = false;
+
+
+                cursors = this.input.keyboard.createCursorKeys();
+                bGame = true;
+
+                this.anims.create({
+                    key: "idle",
+                    frameRate: 1,
+                    frames: this.anims.generateFrameNumbers("player", { start: 7, end: 7 }),
+                    repeat: -1
+                });
+                this.anims.create({
+                    key: "walk",
+                    frameRate: 10,
+                    frames: this.anims.generateFrameNumbers("player", { start: 6, end: 8 }),
+                    repeat: -1
+                });
+
+                stateWalking = -1;
+                player.play("idle");
+
+
+                var mainCamera = this.cameras.main;
+                mainCamera.startFollow(player);
+                mainCamera.setFollowOffset(0, 0);
+                mainCamera.setBounds(0, 0, 2000, gameHeight);
+                this.physics.world.setBounds(0, 0, 2000, gameHeight, true, true, true, true);
+            }
+            update() {
+                if (bGame == true) {
+                    console.log("x=" + player.x);
+                    if (player.y >= 690) {
+                        doGameOver();
+                    } else {
+                        if (cursors.left.isDown) {
+                            player.setVelocityX(-200);
+                            if (stateWalking != 1) {
+                                player.setFlipX(true);
+                                player.play("walk");
+                                stateWalking = 1;
+                            }
+                        } else if (cursors.right.isDown) {
+                            player.setVelocityX(200);
+                            if (stateWalking != 2) {
+                                player.setFlipX(false);
+                                player.play("walk");
+                                stateWalking = 2;
+                            }
+                        } else {
+                            player.setVelocityX(0);
+                            if (stateWalking = !0) {
+                                player.play("idle");
+                                stateWalking = 0;
+                            }
+
+                        }
+                        if (cursors.space.isDown && player.body.onFloor()) {
+                            player.setVelocityY(-550);
+                        }
+
+                    }
+                }
+            }
+        }
+        var config = {
+            type: Phaser.AUTO,
+            width: gameWidth,
+            height: gameHeight,
+            backgroundColor: "#eaffff",
+            autoResize: true,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    debug: true,
+                    gravity: {
+                        y: 900
+                    }
+                }
+            },
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            },
+            parent: "game",
+            audio: { disableWebAudio: true },
+            scene: [titleScene, gameScene]
+        };
+        var game = new Phaser.Game(config);
+    </script>
+</body>
+
+</html>
